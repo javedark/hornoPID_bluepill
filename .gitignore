@@ -4,6 +4,7 @@ rtos/
 *.elf
 *.map
 *.o
+*.bin
 
 FreeRTOSConfig.h
 Makefile
