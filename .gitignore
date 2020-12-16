@@ -1,0 +1,10 @@
+rtos/
+
+*.d
+*.elf
+*.map
+*.o
+
+FreeRTOSConfig.h
+Makefile
+stm32f103c8t6.ld
