@@ -7,5 +7,4 @@ rtos/
 *.bin
 
 FreeRTOSConfig.h
-Makefile
 stm32f103c8t6.ld
