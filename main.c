@@ -8,7 +8,7 @@
 
 #include "FreeRTOS.h"					//FreeRTOS.
 #include "task.h"							//Uso de tareas
-/*#include "ugui.h"							//Uso de ugui.Master_horno
+#include "ugui.h"							//Uso de ugui.Master_horno
 #include "miniprintf.h"				//Para la impresión de texto."""
 #include "parauso_ugui.h"			//Config. de ugui."""
 #include "oled_fun.h"					//Para manejar la pantalla oled."""
@@ -16,7 +16,7 @@
 #include "analog_config.h"		//Config. del canal analógico."""
 #include "mis_img.h"					//Mis imagenes para cargar."""
 #include "controles.h"				//Algoritmos de control. Master_Oled_Menu
-*/
+
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/cm3/nvic.h>
@@ -43,7 +43,7 @@ bool	press(uint32_t PUERTO,uint16_t PIN);
 //Modo de control on-off.Master_Oled_Menu.
 void modo_control_onoff(void);
 //Selección de modo de control.
-void sel_opc(vooid);
+void sel_opc(void);
 
 //--> Definición de funciones.
 
@@ -172,32 +172,45 @@ for (;;) {
 }
 
 
-static void
-gpio_setup(void) {
-
-	rcc_clock_setup_in_hse_8mhz_out_72mhz();	// Use this for "blue pill"
-	rcc_periph_clock_enable(RCC_GPIOC);
-	gpio_set_mode(GPIOC,GPIO_MODE_OUTPUT_2_MHZ,GPIO_CNF_OUTPUT_PUSHPULL,GPIO13);
-}
-
+//--> Tarea que presenta Logo, frame y opciones.
 static void
 task1(void *args) {
-	int i;
-
 	(void)args;
 
+//Condiciones iniciales.
+	gpio_set(LED);
+
+//Logo, frame y opciones.
 	for (;;) {
-		gpio_toggle(GPIOC,GPIO13);
-		for (i = 0; i < 300000; i++)
-			__asm__("nop");
+		mi_marca();
+		frame();
+		opciones();
 	}
 }
 
 int
 main(void) {
+	rcc_clock_setup_in_hse_8mhz_out_72mhz();	//for blue pill
 
-	gpio_setup();
-	xTaskCreate(task1,"LED",100,NULL,configMAX_PRIORITIES-1,NULL);
+	rcc_periph_clock_enable(RCC_GPIOC);	//Conf. de led en tarjeta.
+	gpio_set_mode(GPIOC,
+		GPIO_MODE_OUTPUT_2_MHZ,
+		GPIO_CNF_OUTPUT_PUSHPULL,
+		GPIO13);
+
+	rcc_periph_clock_enable(RCC_GPIOA);	//Conf. del sel y set.
+	gpio_set_mode(GPIOA,
+		GPIO_MODE_INPUT,
+		GPIO_CNF_INPUT_FLOAT,
+		GPIO4|GPIO5);
+
+	spi_oled_init();	//Conf. e inicialización de la OLED.
+
+	adc_init();	//Init. del periférico ADC.
+
+
+
+	xTaskCreate(task1,"PRESENTA",100,NULL,configMAX_PRIORITIES-1,NULL);
 	vTaskStartScheduler();
 	for (;;)
 		;
