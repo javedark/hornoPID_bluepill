@@ -13,3 +13,5 @@ oled_fun.h
 parauso_ugui.h
 spioled_config.h
 ugui.h
+analog_config.h
+controles.h
