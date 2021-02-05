@@ -205,7 +205,6 @@ main(void) {
 		GPIO4|GPIO5);
 
 	spi_oled_init();	//Conf. e inicialización de la OLED.
-
 	adc_init();	//Init. del periférico ADC.
 
 

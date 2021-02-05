@@ -48,7 +48,9 @@ UG_DrawLine(27,31,30,34,pen_to_ug(1));
 UG_FontSelect(&FONT_8X12);
 UG_PutString(45,30,"Master");
 mapa_to_oled();
-vTaskDelay(pdMS_TO_TICKS(5000));
+for(int i = 0; i < 5*11800000; i++) //Retardo de 5 seg.
+  __asm__("nop");
+//vTaskDelay(pdMS_TO_TICKS(5000));
 limpia_pantalla();
 }
 
@@ -66,7 +68,9 @@ void frame(void){
   UG_PutString(91,15,"   C"); // Coordenadas de la impresión de la temperatura
   UG_DrawCircle(114,15,2,pen_to_ug(1)); // Símbolo de grados.
   mapa_to_oled();
-  vTaskDelay(200);
+  for(int i = 0; i < 11800000/5; i++) //Retardeo de 2 miliseg.
+    __asm__("nop");
+  //vTaskDelay(200);
 //  limpia_pantalla();
 }
 
