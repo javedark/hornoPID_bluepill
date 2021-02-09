@@ -44,6 +44,10 @@ bool	press(uint32_t PUERTO,uint16_t PIN);
 void modo_control_onoff(void);
 //Selección de modo de control.
 void sel_opc(void);
+//Para la lectura de temperatura.
+int temp(void);
+//Muestra la temperatura en oled.
+void imp_temp(void);
 
 //--> Definición de funciones.
 
@@ -62,6 +66,24 @@ read_adc(uint8_t channel) {
 		taskYIELD();
 	return adc_read_regular(ADC1);
 }
+//F. para la obtención de la temperatura.
+int temp(void){
+	float volts;	//Para almacenar el voltaje obtenido en canal 0.
+	int		temperatura;	//Valor que regresa la función, es la temperatura.
+
+	volts = read_adc(0)*330/4095;
+	temperatura = 20.211 + (87.813 * volts)/100;
+
+	return	temperatura;
+}
+//F. Para mostrar la temperatura en oled.
+void imp_temp(void){
+	char buf[16];
+
+	mini_snprintf(buf,sizeof buf,"%d",temp());
+	UG_PutString(5,19,buf);
+	mapa_to_oled();
+}
 //F. Para saber si un botón fue presionado.
 bool	press(uint32_t PUERTO,uint16_t PIN){
 	if(gpio_get(PUERTO,PIN) != 0x0000) vTaskDelay(pdMS_TO_TICKS(180));
@@ -73,7 +95,7 @@ bool	press(uint32_t PUERTO,uint16_t PIN){
 	}
 }
 //F. Para desplegar información del modo de control.
-void modo_control_onoff(void){
+/*void modo_control_onoff(void){
 	// Límite inferior.
 	limpia_seccion();
   char buf[16];
@@ -121,9 +143,9 @@ void modo_control_onoff(void){
 	mini_snprintf(buf,sizeof buf,"%d",lim_inf);
 	UG_PutString(55,44,buf);
 	mapa_to_oled();
-}
+}*/
 //F. Para la selección del modo de control.
-void sel_opc(void){
+/*void sel_opc(void){
 uint8_t	sel_opc = 0, ejec_opc = 0;
 mi_marca();
 frame();
@@ -169,23 +191,16 @@ for (;;) {
 		break;
 	}
 }// Cierre del for
-}
+}*/
 
 
-//--> Tarea que presenta Logo, frame y opciones.
+//--> Tarea 1
 static void
-task1(void *args) {
+tarea1(void *args) {
 	(void)args;
 
-//Condiciones iniciales.
-	gpio_set(LED);
-
-//Logo, frame y opciones.
-	for (;;) {
-		mi_marca();
-		frame();
-		opciones();
-	}
+	imp_temp();
+	vTaskDelay(pdMS_TO_TICKS(500));
 }
 
 int
@@ -207,9 +222,14 @@ main(void) {
 	spi_oled_init();	//Conf. e inicialización de la OLED.
 	adc_init();	//Init. del periférico ADC.
 
+	mi_marca();	//Dibuja mi marda por 5 seg.
+	frame();	//Dibuja recuadro y espera 2ms.
 
+	//--> Se encarda solo de mostrar la temperatura en oled cada 0.5s.
+	xTaskCreate(tarea1,"IMP_TEMP",100,NULL,configMAX_PRIORITIES-1,NULL);
+	//--> Se encarga de obtener el modo de control y sus parámetros.
+	xTaskCreate(tarea2,"M_C_PRTOS",100.NULL,configMAX_PRIORITIES-1,NULL);
 
-	xTaskCreate(task1,"PRESENTA",100,NULL,configMAX_PRIORITIES-1,NULL);
 	vTaskStartScheduler();
 	for (;;)
 		;

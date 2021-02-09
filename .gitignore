@@ -8,10 +8,13 @@ rtos/
 
 FreeRTOSConfig.h
 stm32f103c8t6.ld
-miniprintf.h
-oled_fun.h
-parauso_ugui.h
-spioled_config.h
-ugui.h
-analog_config.h
-controles.h
+
+includes/miniprintf.h
+includes/oled_fun.h
+includes/parauso_ugui.h
+includes/spioled_config.h
+includes/analog_config.h
+
+cofu/analog_config.c
+cofu/miniprintf.c
+cofu/spioled_config.c
