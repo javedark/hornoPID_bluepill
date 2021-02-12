@@ -6,20 +6,25 @@
  *
  */
 
-#include "FreeRTOS.h"					//FreeRTOS.
-#include "task.h"							//Uso de tareas
-#include "ugui.h"							//Uso de ugui.Master_horno
-#include "miniprintf.h"				//Para la impresión de texto."""
-#include "parauso_ugui.h"			//Config. de ugui."""
-#include "oled_fun.h"					//Para manejar la pantalla oled."""
-#include "spioled_config.h"		//Config. spi para la pantalla oled."""
-#include "analog_config.h"		//Config. del canal analógico."""
-#include "mis_img.h"					//Mis imagenes para cargar."""
-#include "controles.h"				//Algoritmos de control. Master_Oled_Menu
+ //*****Librerias requeridas*****
 
-#include <libopencm3/stm32/rcc.h>
-#include <libopencm3/stm32/gpio.h>
-#include <libopencm3/cm3/nvic.h>
+ #include "FreeRTOS.h"					//FreeRTOS.
+ #include "task.h"							//Uso de tareas
+ #include "includes/ugui.h"
+ #include "includes/miniprintf.h"			//Para la impresión de texto.
+
+ #include <libopencm3/stm32/rcc.h>
+ #include <libopencm3/stm32/gpio.h>
+ #include <libopencm3/cm3/nvic.h>
+ #include <libopencm3/stm32/spi.h>
+ #include <libopencm3/stm32/adc.h>
+
+ #include "includes/parauso_ugui.h"		//Config. de ugui.
+ #include "includes/oled_fun.h"				//Funciones para el uso de la OLED.
+ #include "includes/spioled_config.h"	//Config. para la pantalla OLED.
+ #include "includes/mis_img.h"				//Mis imagenes, usan for para los retardos.
+ #include "includes/analog_config.h"	//Config. para el uso del canal analógico.
+ #include "includes/controles.h"			//Algoritmos de control. Master_Oled_Menu
 
 //--> Definiciones.
 
@@ -42,8 +47,6 @@ static uint16_t read_adc(uint8_t channel);
 bool	press(uint32_t PUERTO,uint16_t PIN);
 //Modo de control on-off.Master_Oled_Menu.
 void modo_control_onoff(void);
-//Selección de modo de control.
-void sel_opc(void);
 //Para la lectura de temperatura.
 int temp(void);
 //Muestra la temperatura en oled.
@@ -81,7 +84,7 @@ void imp_temp(void){
 	char buf[16];
 
 	mini_snprintf(buf,sizeof buf,"%d",temp());
-	UG_PutString(5,19,buf);
+	UG_PutString(91,15,buf);
 	mapa_to_oled();
 }
 //F. Para saber si un botón fue presionado.
@@ -95,7 +98,7 @@ bool	press(uint32_t PUERTO,uint16_t PIN){
 	}
 }
 //F. Para desplegar información del modo de control.
-/*void modo_control_onoff(void){
+void modo_control_onoff(void){
 	// Límite inferior.
 	limpia_seccion();
   char buf[16];
@@ -143,65 +146,69 @@ bool	press(uint32_t PUERTO,uint16_t PIN){
 	mini_snprintf(buf,sizeof buf,"%d",lim_inf);
 	UG_PutString(55,44,buf);
 	mapa_to_oled();
-}*/
-//F. Para la selección del modo de control.
-/*void sel_opc(void){
-uint8_t	sel_opc = 0, ejec_opc = 0;
-mi_marca();
-frame();
-opciones();
-
-for (;;) {
-	// Selección de opciones
-	while (ejec_opc == 0) {
-		switch (sel_opc) {
-			case 0:
-			UG_FillCircle(15,48,6,pen_to_ug(0));
-			UG_FillCircle(15,28,6,pen_to_ug(1));
-			UG_DrawCircle(15,48,6,pen_to_ug(1));
-			mapa_to_oled();
-			while(1){
-				if(press(SELECT)){sel_opc = 1; break;}
-				if(press(SET)){ejec_opc = 1; break;}
-			} break;
-
-			case 1:
-			UG_FillCircle(15,28,6,pen_to_ug(0));
-			UG_DrawCircle(15,28,6,pen_to_ug(1));
-			UG_FillCircle(15,48,6,pen_to_ug(1));
-			mapa_to_oled();
-			while(1){
-				if(press(SELECT)){sel_opc = 0; break;}
-				if(press(SET)){ejec_opc = 2; break;}
-			} break;
-		}
-	}
-
-	// Ejecución de opciones.
-	switch (ejec_opc) {
-		case 1:
-		modo_control_onoff();
-		gpio_clear(LED);
-		while(1);
-		break;
-
-		case 2:
-		gpio_clear(LED);
-		while(1);
-		break;
-	}
-}// Cierre del for
-}*/
-
+}
 
 //--> Tarea 1
 static void
 tarea1(void *args) {
 	(void)args;
-
-	imp_temp();
-	vTaskDelay(pdMS_TO_TICKS(500));
+  mi_marca();	//Dibuja mi marda por 5 seg.
+	frame();	//Dibuja recuadro y espera 2ms.
+  for(;;){
+	   imp_temp();
+	    vTaskDelay(pdMS_TO_TICKS(500));
+    }
 }
+
+//--> Tarea 2
+ static void
+ tarea2(void *args){
+   (void)args;
+   uint8_t sel_opc = 0, ejec_opc = 0;
+   vTaskDelay(pdMS_TO_TICKS(5300));
+   opciones();
+
+   for(;;){
+     // Selección de opciones
+     while (ejec_opc == 0) {
+       switch (sel_opc) {
+         case 0:
+         UG_FillCircle(15,48,6,pen_to_ug(0));
+         UG_FillCircle(15,28,6,pen_to_ug(1));
+         UG_DrawCircle(15,48,6,pen_to_ug(1));
+         mapa_to_oled();
+         while(1){
+           if(press(SELECT)){sel_opc = 1; break;}
+           if(press(SET)){ejec_opc = 1; break;}
+         } break;
+
+         case 1:
+         UG_FillCircle(15,28,6,pen_to_ug(0));
+         UG_DrawCircle(15,28,6,pen_to_ug(1));
+         UG_FillCircle(15,48,6,pen_to_ug(1));
+         mapa_to_oled();
+         while(1){
+           if(press(SELECT)){sel_opc = 0; break;}
+           if(press(SET)){ejec_opc = 2; break;}
+         } break;
+       }
+     }
+
+     // Ejecución de opciones.
+     switch (ejec_opc) {
+       case 1:
+       modo_control_onoff();
+       gpio_clear(LED);
+       while(1);
+       break;
+
+       case 2:
+       gpio_clear(LED);
+       while(1);
+       break;
+     }
+   }// Cierre del for
+ }// Final de la tarea 2
 
 int
 main(void) {
@@ -222,13 +229,12 @@ main(void) {
 	spi_oled_init();	//Conf. e inicialización de la OLED.
 	adc_init();	//Init. del periférico ADC.
 
-	mi_marca();	//Dibuja mi marda por 5 seg.
-	frame();	//Dibuja recuadro y espera 2ms.
+
 
 	//--> Se encarda solo de mostrar la temperatura en oled cada 0.5s.
 	xTaskCreate(tarea1,"IMP_TEMP",100,NULL,configMAX_PRIORITIES-1,NULL);
 	//--> Se encarga de obtener el modo de control y sus parámetros.
-	xTaskCreate(tarea2,"M_C_PRTOS",100.NULL,configMAX_PRIORITIES-1,NULL);
+	xTaskCreate(tarea2,"M_C_PRTOS",200,NULL,configMAX_PRIORITIES-1,NULL);
 
 	vTaskStartScheduler();
 	for (;;)
