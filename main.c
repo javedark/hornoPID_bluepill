@@ -10,9 +10,11 @@
 
  #include "FreeRTOS.h"					//FreeRTOS.
  #include "task.h"							//Uso de tareas
+ #include "semphr.h"
  #include "includes/ugui.h"
  #include "includes/miniprintf.h"			//Para la impresión de texto.
 
+ #include <libopencm3/cm3/cortex.h>
  #include <libopencm3/stm32/rcc.h>
  #include <libopencm3/stm32/gpio.h>
  #include <libopencm3/cm3/nvic.h>
@@ -32,13 +34,31 @@
 #define LED 	 GPIOC,GPIO13		//Master_Oled_Menu
 #define SET 	 GPIOA,GPIO5		//Master_Oled_Menu
 
+//--> Handles.
+
+static SemaphoreHandle_t h_mutex;
+
 //--> Variables globales.
 
 static int8_t lim_inf; // Límite inferior del modo ON-OFF.Master_Oled_Menu
 static int8_t lim_sup; // Límite superior del modo ON-OFF.Master_Oled_Menu
 
+//--> Mutex lock y mutex unlock.
+
+static void
+mutex_lock(void){
+  xSemaphoreTake(h_mutex,portMAX_DELAY);
+}
+
+static void
+mutex_unlock(void){
+  xSemaphoreGive(h_mutex);
+}
+
 //--> Prototipos de funciones.
 
+//Para la impresión de datos en la oled con mutexes.
+void imp_oled_mutexes(void);
 //Para el mapeo del valor analógico.Master_horno
 long mapeo(long x, long in_min, long in_max, long out_min, long out_max);
 //Para la lectura del canal analógico.Master_horno
@@ -54,6 +74,12 @@ void imp_temp(void);
 
 //--> Definición de funciones.
 
+//Función para la impresión de datos en oled usando mutexes.
+void imp_oled_mutexes(void){
+  mutex_lock();
+  mapa_to_oled();
+  mutex_unlock();
+}
 //Función de mapeo para el canal analógico.
 long
 mapeo(long x,long in_min, long in_max, long out_min, long out_max){
@@ -84,8 +110,9 @@ void imp_temp(void){
 	char buf[16];
 
 	mini_snprintf(buf,sizeof buf,"%d",temp());
+  UG_FontSelect(&FONT_8X12);
 	UG_PutString(91,15,buf);
-	mapa_to_oled();
+	imp_oled_mutexes();
 }
 //F. Para saber si un botón fue presionado.
 bool	press(uint32_t PUERTO,uint16_t PIN){
@@ -106,12 +133,12 @@ void modo_control_onoff(void){
   UG_PutString(3,6,"Establece el");
   UG_PutString(3,16,"Limite INF:");
   UG_PutString(3,47,"grados cent.");
-  mapa_to_oled();
+  imp_oled_mutexes();
   for(int i = 0; i <= 30; i = i+2){
     mini_snprintf(buf,sizeof buf, "%d",i);
     UG_FontSelect(&FONT_8X12);
     UG_PutString(30,30,buf);
-    mapa_to_oled();
+    imp_oled_mutexes();
     while(press(SELECT) == pdFALSE){
       if(press(SET)){lim_inf = i; i = 30; break;}
     }
@@ -122,12 +149,12 @@ void modo_control_onoff(void){
 	UG_PutString(3,6,"Establece el");
 	UG_PutString(3,16,"Limite SUP:");
 	UG_PutString(3,47,"grados cent.");
-	mapa_to_oled();
+	imp_oled_mutexes();
 	for(int i = lim_inf + 2; i <= 30; i = i +2){
 		mini_snprintf(buf,sizeof buf, "%d",i);
 		UG_FontSelect(&FONT_8X12);
 		UG_PutString(30,30,buf);
-		mapa_to_oled();
+		imp_oled_mutexes();
 		while(press(SELECT) == pdFALSE){
 			if(press(SET)){lim_sup = i; i = 30; break;}
 		}
@@ -139,13 +166,11 @@ void modo_control_onoff(void){
 	UG_PutString(3,6,"*ON-OFF");
 	UG_PutString(3,22,"L.SUP:");
 	UG_PutString(3,44,"L.INF:");
-	mapa_to_oled();
 	mini_snprintf(buf,sizeof buf,"%d",lim_sup);
 	UG_PutString(55,22,buf);
-	mapa_to_oled();
 	mini_snprintf(buf,sizeof buf,"%d",lim_inf);
 	UG_PutString(55,44,buf);
-	mapa_to_oled();
+	imp_oled_mutexes();
 }
 
 //--> Tarea 1
@@ -176,7 +201,7 @@ tarea1(void *args) {
          UG_FillCircle(15,48,6,pen_to_ug(0));
          UG_FillCircle(15,28,6,pen_to_ug(1));
          UG_DrawCircle(15,48,6,pen_to_ug(1));
-         mapa_to_oled();
+         imp_oled_mutexes();
          while(1){
            if(press(SELECT)){sel_opc = 1; break;}
            if(press(SET)){ejec_opc = 1; break;}
@@ -186,7 +211,7 @@ tarea1(void *args) {
          UG_FillCircle(15,28,6,pen_to_ug(0));
          UG_DrawCircle(15,28,6,pen_to_ug(1));
          UG_FillCircle(15,48,6,pen_to_ug(1));
-         mapa_to_oled();
+         imp_oled_mutexes();
          while(1){
            if(press(SELECT)){sel_opc = 0; break;}
            if(press(SET)){ejec_opc = 2; break;}
@@ -230,7 +255,7 @@ main(void) {
 	adc_init();	//Init. del periférico ADC.
 
 
-
+  h_mutex = xSemaphoreCreateMutex();
 	//--> Se encarda solo de mostrar la temperatura en oled cada 0.5s.
 	xTaskCreate(tarea1,"IMP_TEMP",100,NULL,configMAX_PRIORITIES-1,NULL);
 	//--> Se encarga de obtener el modo de control y sus parámetros.
