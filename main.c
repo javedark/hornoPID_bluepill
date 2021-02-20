@@ -42,6 +42,9 @@ static SemaphoreHandle_t h_mutex;
 
 static int8_t lim_inf; // Límite inferior del modo ON-OFF.Master_Oled_Menu
 static int8_t lim_sup; // Límite superior del modo ON-OFF.Master_Oled_Menu
+static int8_t gan_P;   // Ganancia proporcional.
+static int8_t  gan_I;   // Ganancia integral.
+static int8_t gan_D;   // Ganancia derivativa.
 
 //--> Mutex lock y mutex unlock.
 
@@ -65,8 +68,10 @@ long mapeo(long x, long in_min, long in_max, long out_min, long out_max);
 static uint16_t read_adc(uint8_t channel);
 //Para determinar si el botón fue presionado.Master_Oled_Menu
 bool	press(uint32_t PUERTO,uint16_t PIN);
-//Modo de control on-off.Master_Oled_Menu.
-void modo_control_onoff(void);
+//Parámetros del modo de control ON-OFF
+void param_control_onoff(void);
+//Parámetros del modo de control PID
+void param_control_pid(void);
 //Para la lectura de temperatura.
 int temp(void);
 //Muestra la temperatura en oled.
@@ -124,8 +129,8 @@ bool	press(uint32_t PUERTO,uint16_t PIN){
 		return pdFALSE;
 	}
 }
-//F. Para desplegar información del modo de control.
-void modo_control_onoff(void){
+//F. Para establecer los parámetros del modo de control ON_OFF
+void param_control_onoff(void){
 	// Límite inferior.
 	limpia_seccion();
   char buf[16];
@@ -172,6 +177,72 @@ void modo_control_onoff(void){
 	UG_PutString(55,44,buf);
 	imp_oled_mutexes();
 }
+
+//F. para establecer los parámetros del modo de contro PIDvoid
+param_control_pid(void){
+	// Ganancia proporcional.
+	limpia_seccion();
+  char buf[16];
+  UG_FontSelect(&FONT_5X8);
+  UG_PutString(3,6,"Establece la");
+  UG_PutString(3,16,"Ganancia PROP:");
+  imp_oled_mutexes();
+  for(int i = 0; i <= 30; i = i+2){
+    mini_snprintf(buf,sizeof buf, "%d",i);
+    UG_FontSelect(&FONT_8X12);
+    UG_PutString(30,30,buf);
+    imp_oled_mutexes();
+    while(press(SELECT) == pdFALSE){
+      if(press(SET)){gan_P = i; i = 30; break;}
+    }
+  }
+	// Ganancia integrativa
+	limpia_seccion();
+	UG_FontSelect(&FONT_5X8);
+	UG_PutString(3,6,"Establece la");
+	UG_PutString(3,16,"Ganancia INT:");
+	imp_oled_mutexes();
+	for(int i = 0 ; i <= 30; i = i +2){
+		mini_snprintf(buf,sizeof buf, "%d",i);
+		UG_FontSelect(&FONT_8X12);
+		UG_PutString(30,30,buf);
+		imp_oled_mutexes();
+		while(press(SELECT) == pdFALSE){
+			if(press(SET)){gan_I = i; i = 30; break;}
+		}
+	}
+  // Ganancia derivativa
+  limpia_seccion();
+  UG_FontSelect(&FONT_5X8);
+  UG_PutString(3,6,"Establece la");
+  UG_PutString(3,16,"Ganancia DER:");
+  imp_oled_mutexes();
+  for(int i = 0 ; i <= 30; i = i +2){
+    mini_snprintf(buf,sizeof buf, "%d",i);
+    UG_FontSelect(&FONT_8X12);
+    UG_PutString(30,30,buf);
+    imp_oled_mutexes();
+    while(press(SELECT) == pdFALSE){
+      if(press(SET)){gan_D = i; i = 30; break;}
+    }
+  }
+
+	// Pantalla muestra modo de control PID
+	limpia_seccion();
+	UG_FontSelect(&FONT_8X8);
+	UG_PutString(3,6,"**PID**");
+	UG_PutString(3,22,"G.P.:");
+	UG_PutString(3,38,"G.I.:");
+  UG_PutString(3,50,"G.D.:");
+	mini_snprintf(buf,sizeof buf,"%d",gan_P);
+	UG_PutString(55,22,buf);
+	mini_snprintf(buf,sizeof buf,"%d",gan_I);
+	UG_PutString(55,38,buf);
+  mini_snprintf(buf,sizeof buf,"%d",gan_D);
+	UG_PutString(55,50,buf);
+	imp_oled_mutexes();
+}
+
 
 //--> Tarea 1
 static void
@@ -222,12 +293,13 @@ tarea1(void *args) {
      // Ejecución de opciones.
      switch (ejec_opc) {
        case 1:
-       modo_control_onoff();
+       param_control_onoff();
        gpio_clear(LED);
        while(1);
        break;
 
        case 2:
+       param_control_pid();
        gpio_clear(LED);
        while(1);
        break;
