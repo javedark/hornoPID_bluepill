@@ -37,13 +37,14 @@
 //--> Handles.
 
 static SemaphoreHandle_t h_mutex;
+static TaskHandle_t xTarea1 = NULL, xTarea2 = NULL, xTarea3 = NULL;
 
 //--> Variables globales.
 
-static int8_t lim_inf; // Límite inferior del modo ON-OFF.Master_Oled_Menu
-static int8_t lim_sup; // Límite superior del modo ON-OFF.Master_Oled_Menu
+static int lim_inf; // Límite inferior del modo ON-OFF.Master_Oled_Menu
+static int lim_sup; // Límite superior del modo ON-OFF.Master_Oled_Menu
 static int8_t gan_P;   // Ganancia proporcional.
-static int8_t  gan_I;   // Ganancia integral.
+static int8_t gan_I;   // Ganancia integral.
 static int8_t gan_D;   // Ganancia derivativa.
 
 //--> Mutex lock y mutex unlock.
@@ -139,13 +140,13 @@ void param_control_onoff(void){
   UG_PutString(3,16,"Limite INF:");
   UG_PutString(3,47,"grados cent.");
   imp_oled_mutexes();
-  for(int i = 0; i <= 30; i = i+2){
+  for(int i = 0; i <= 36; i = i+2){
     mini_snprintf(buf,sizeof buf, "%d",i);
     UG_FontSelect(&FONT_8X12);
     UG_PutString(30,30,buf);
     imp_oled_mutexes();
     while(press(SELECT) == pdFALSE){
-      if(press(SET)){lim_inf = i; i = 30; break;}
+      if(press(SET)){lim_inf = i; i = 37; break;}
     }
   }
 	// Límite superior.
@@ -155,13 +156,13 @@ void param_control_onoff(void){
 	UG_PutString(3,16,"Limite SUP:");
 	UG_PutString(3,47,"grados cent.");
 	imp_oled_mutexes();
-	for(int i = lim_inf + 2; i <= 30; i = i +2){
+	for(int i = lim_inf + 2; i <= 36; i = i +2){
 		mini_snprintf(buf,sizeof buf, "%d",i);
 		UG_FontSelect(&FONT_8X12);
 		UG_PutString(30,30,buf);
 		imp_oled_mutexes();
 		while(press(SELECT) == pdFALSE){
-			if(press(SET)){lim_sup = i; i = 30; break;}
+			if(press(SET)){lim_sup = i; i = 37; break;}
 		}
 	}
 
@@ -250,6 +251,9 @@ tarea1(void *args) {
 	(void)args;
   mi_marca();	//Dibuja mi marda por 5 seg.
 	frame();	//Dibuja recuadro y espera 2ms.
+  opciones();
+  vTaskDelay(pdMS_TO_TICKS(100));
+  xTaskNotifyGive(xTarea2);
   for(;;){
 	   imp_temp();
 	    vTaskDelay(pdMS_TO_TICKS(500));
@@ -260,9 +264,9 @@ tarea1(void *args) {
  static void
  tarea2(void *args){
    (void)args;
+   ulTaskNotifyTake(pdTRUE,portMAX_DELAY);
    uint8_t sel_opc = 0, ejec_opc = 0;
-   vTaskDelay(pdMS_TO_TICKS(5300));
-   opciones();
+//   vTaskDelay(pdMS_TO_TICKS(5300));
 
    for(;;){
      // Selección de opciones
@@ -294,18 +298,34 @@ tarea1(void *args) {
      switch (ejec_opc) {
        case 1:
        param_control_onoff();
+       xTaskNotifyGive(xTarea3);
        gpio_clear(LED);
-       while(1);
+//       while(1);
        break;
 
        case 2:
        param_control_pid();
        gpio_clear(LED);
-       while(1);
+//       while(1);
        break;
-     }
+     }   vTaskSuspend(xTarea2);
    }// Cierre del for
  }// Final de la tarea 2
+
+//--> Tarea 3
+static void
+tarea3(void *args){
+  (void)args;
+  ulTaskNotifyTake(pdTRUE,portMAX_DELAY);
+  for(;;){
+  //  gpio_toggle(GPIOB,GPIO0);
+  //  vTaskDelay(pdMS_TO_TICKS(1000));
+    if(temp() >= lim_sup) gpio_clear(GPIOB,GPIO0);
+    vTaskDelay(pdMS_TO_TICKS(127));
+    if(temp() <= lim_inf) gpio_set(GPIOB,GPIO0);
+    vTaskDelay(pdMS_TO_TICKS(127));
+  }
+}
 
 int
 main(void) {
@@ -323,15 +343,27 @@ main(void) {
 		GPIO_CNF_INPUT_FLOAT,
 		GPIO4|GPIO5);
 
+  rcc_periph_clock_enable(RCC_GPIOB); //Conf. de la salida a la lámpara.
+  gpio_set_mode(GPIOB,
+    GPIO_MODE_OUTPUT_2_MHZ,
+    GPIO_CNF_OUTPUT_PUSHPULL,
+    GPIO0);
+
+  gpio_set(GPIOB,GPIO0);
+
 	spi_oled_init();	//Conf. e inicialización de la OLED.
 	adc_init();	//Init. del periférico ADC.
 
 
+
+
   h_mutex = xSemaphoreCreateMutex();
 	//--> Se encarda solo de mostrar la temperatura en oled cada 0.5s.
-	xTaskCreate(tarea1,"IMP_TEMP",100,NULL,configMAX_PRIORITIES-1,NULL);
+	xTaskCreate(tarea1,"IMP_TEMP",100,NULL,configMAX_PRIORITIES-1,&xTarea1);
 	//--> Se encarga de obtener el modo de control y sus parámetros.
-	xTaskCreate(tarea2,"M_C_PRTOS",200,NULL,configMAX_PRIORITIES-1,NULL);
+	xTaskCreate(tarea2,"M_C_PRTOS",100,NULL,configMAX_PRIORITIES-1,&xTarea2);
+  //--> Se encarga de ejecutar el modo de control ON-ON_OFF
+  xTaskCreate(tarea3,"M_C_OnOff",100,NULL,configMAX_PRIORITIES-1,&xTarea3);
 
 	vTaskStartScheduler();
 	for (;;)
