@@ -264,11 +264,9 @@ tarea1(void *args) {
  static void
  tarea2(void *args){
    (void)args;
-   ulTaskNotifyTake(pdTRUE,portMAX_DELAY);
    uint8_t sel_opc = 0, ejec_opc = 0;
-//   vTaskDelay(pdMS_TO_TICKS(5300));
-
    for(;;){
+     ulTaskNotifyTake(pdTRUE,portMAX_DELAY); //Espera a la notificación de tarea1.
      // Selección de opciones
      while (ejec_opc == 0) {
        switch (sel_opc) {
@@ -316,14 +314,22 @@ tarea1(void *args) {
 static void
 tarea3(void *args){
   (void)args;
-  ulTaskNotifyTake(pdTRUE,portMAX_DELAY);
   for(;;){
-  //  gpio_toggle(GPIOB,GPIO0);
-  //  vTaskDelay(pdMS_TO_TICKS(1000));
-    if(temp() >= lim_sup) gpio_clear(GPIOB,GPIO0);
-    vTaskDelay(pdMS_TO_TICKS(127));
-    if(temp() <= lim_inf) gpio_set(GPIOB,GPIO0);
-    vTaskDelay(pdMS_TO_TICKS(127));
+    ulTaskNotifyTake(pdTRUE,portMAX_DELAY);
+    while(1){
+      if(temp() > lim_sup){
+         gpio_clear(GPIOB,GPIO0);
+         UG_FillFrame(90,44,126,62,pen_to_ug(0));
+         imp_oled_mutexes();
+       }
+    vTaskDelay(pdMS_TO_TICKS(30));
+      if(temp() < lim_inf) {
+        gpio_set(GPIOB,GPIO0);
+        UG_FillFrame(90,44,126,62,pen_to_ug(1));
+        imp_oled_mutexes();
+      }
+    vTaskDelay(pdMS_TO_TICKS(30));
+    }
   }
 }
 
@@ -361,9 +367,9 @@ main(void) {
 	//--> Se encarda solo de mostrar la temperatura en oled cada 0.5s.
 	xTaskCreate(tarea1,"IMP_TEMP",100,NULL,configMAX_PRIORITIES-1,&xTarea1);
 	//--> Se encarga de obtener el modo de control y sus parámetros.
-	xTaskCreate(tarea2,"M_C_PRTOS",100,NULL,configMAX_PRIORITIES-1,&xTarea2);
+	xTaskCreate(tarea2,"M_C_PRTOS",100,NULL,configMAX_PRIORITIES-2,&xTarea2);
   //--> Se encarga de ejecutar el modo de control ON-ON_OFF
-  xTaskCreate(tarea3,"M_C_OnOff",100,NULL,configMAX_PRIORITIES-1,&xTarea3);
+  xTaskCreate(tarea3,"M_C_OnOff",100,NULL,configMAX_PRIORITIES-3,&xTarea3);
 
 	vTaskStartScheduler();
 	for (;;)
