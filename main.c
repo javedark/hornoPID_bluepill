@@ -45,16 +45,22 @@ static TaskHandle_t xTarea1 = NULL, xTarea2 = NULL, xTarea3 = NULL, xTarea4 = NU
 static int lim_inf; // Límite inferior del modo ON-OFF.Master_Oled_Menu
 static int lim_sup; // Límite superior del modo ON-OFF.Master_Oled_Menu
 static int8_t gan_P;   // Ganancia proporcional.
-static int8_t gan_I;   // Ganancia integral.
-static int8_t gan_D;   // Ganancia derivativa.
-static int8_t Tdes;    // Temperatura deseada.
+static int16_t gan_I;   // Ganancia integral.
+static int8_t  gan_D;   // Ganancia derivativa.
+static int8_t  Tdes;    // Temperatura deseada.
 static volatile bool flag = 0; // Bandera de interrupción.
+
+//--> Variables para le modo PID
+
+static float Opid = 0, err = 0, Oint = 0, Oder = 0, Temp_a= 0, Opid_max = 0, tk = 0.008;
+static int t_triac = 1;
+static bool modoPID = 0;
 
 // --> ISR
 
 void
 	exti15_10_isr(){
-		gpio_clear(GPIOB,GPIO1);;
+    gpio_clear(GPIOB,GPIO0);
     flag = 1;
 		exti_reset_request(EXTI10);
 		exti_reset_request(EXTI10);
@@ -193,7 +199,7 @@ void param_control_onoff(void){
 }
 
 //F. para establecer los parámetros del modo de contro PIDvoid
-param_control_pid(void){
+void param_control_pid(void){
 	// Temperatura deseada
 
   char buf[16];
@@ -202,13 +208,13 @@ param_control_pid(void){
   UG_PutString(3,6,"Establece la");
   UG_PutString(3,16,"Tem. deseada:");
   imp_oled_mutexes();
-  for(int i = 0 ; i <= 30; i = i +2){
+  for(int i = 0 ; i <= 40; i = i + 1){
     mini_snprintf(buf,sizeof buf, "%d",i);
     UG_FontSelect(&FONT_8X12);
     UG_PutString(30,30,buf);
     imp_oled_mutexes();
     while(press(SELECT) == pdFALSE){
-      if(press(SET)){Tdes = i; i = 30; break;}
+      if(press(SET)){Tdes = i; i = 41; break;}
     }
   }
 
@@ -218,13 +224,13 @@ param_control_pid(void){
   UG_PutString(3,6,"Establece la");
   UG_PutString(3,16,"Ganancia PROP:");
   imp_oled_mutexes();
-  for(int i = 0; i <= 30; i = i+2){
+  for(int i = 0; i <= 30; i = i+1){
     mini_snprintf(buf,sizeof buf, "%d",i);
     UG_FontSelect(&FONT_8X12);
     UG_PutString(30,30,buf);
     imp_oled_mutexes();
     while(press(SELECT) == pdFALSE){
-      if(press(SET)){gan_P = i; i = 30; break;}
+      if(press(SET)){gan_P = i; i = 31; break;}
     }
   }
 
@@ -234,13 +240,13 @@ param_control_pid(void){
 	UG_PutString(3,6,"Establece la");
 	UG_PutString(3,16,"Ganancia INT:");
 	imp_oled_mutexes();
-	for(int i = 0 ; i <= 30; i = i +2){
+	for(int i = 0 ; i <= 500; i = i + 25){
 		mini_snprintf(buf,sizeof buf, "%d",i);
 		UG_FontSelect(&FONT_8X12);
 		UG_PutString(30,30,buf);
 		imp_oled_mutexes();
 		while(press(SELECT) == pdFALSE){
-			if(press(SET)){gan_I = i; i = 30; break;}
+			if(press(SET)){gan_I = i; i = 501; break;}
 		}
 	}
   // Ganancia derivativa
@@ -249,8 +255,8 @@ param_control_pid(void){
   UG_PutString(3,6,"Establece la");
   UG_PutString(3,16,"Ganancia DER:");
   imp_oled_mutexes();
-  for(int i = 0 ; i <= 30; i = i +2){
-    mini_snprintf(buf,sizeof buf, "%d",i);
+  for(int i = 0 ; i <= 30; i = i + 1){
+    mini_snprintf(buf,sizeof buf, "%d.%03d",i/1000,i%1000);
     UG_FontSelect(&FONT_8X12);
     UG_PutString(30,30,buf);
     imp_oled_mutexes();
@@ -272,8 +278,8 @@ param_control_pid(void){
 	UG_PutString(55,22,buf);
 	mini_snprintf(buf,sizeof buf,"%d",gan_I);
 	UG_PutString(55,36,buf);
-  mini_snprintf(buf,sizeof buf,"%d",gan_D);
-	UG_PutString(55,50,buf);
+  mini_snprintf(buf,sizeof buf,"%d.%03d",gan_D/1000,gan_D%1000);
+	UG_PutString(45,50,buf);
 	imp_oled_mutexes();
 }
 
@@ -290,6 +296,17 @@ tarea1(void *args) {
   for(;;){
 	   imp_temp();
 	    vTaskDelay(pdMS_TO_TICKS(500));
+      if(modoPID == 1){
+        Opid_max = gan_P*Tdes;
+        err = Tdes - temp();  // Cálculo de error
+        Oint = Oint + err*tk; // Salida de la acción integral.
+        Oder = (Temp_a - temp())/tk; // Salida de la acción derivativa.
+        Opid = gan_P*(err + (1/gan_I)*Oint - (gan_D/1000)*Oder); // Salida del contro PID
+        Temp_a = temp();  // Actualización de la temp para el calculo de la acción derivativa.
+        if(0 < Opid && Opid < Opid_max )t_triac = 8*(Opid_max/Opid); // Control de la potencia a la carga.
+        if(Opid > Opid_max) t_triac = 8; // Se apaga la carga.
+        if(Opid < 0) t_triac = 0; // Se suministra 100% de energía a la carga.
+      }
     }
 }
 
@@ -337,6 +354,7 @@ tarea1(void *args) {
        case 2:
        param_control_pid();
        xTaskNotifyGive(xTarea4);
+       modoPID = 1;
        gpio_clear(LED);
 //       while(1);
        break;
@@ -370,6 +388,7 @@ tarea3(void *args){
 static void
 tarea4(void *args){
   (void)args;
+
   ulTaskNotifyTake(pdTRUE,portMAX_DELAY);
 
   //** Configuración de la interrupción.
@@ -378,28 +397,18 @@ tarea4(void *args){
   exti_set_trigger(EXTI10,EXTI_TRIGGER_FALLING);	// Se configura si es flaco de subida o bajada.
   exti_enable_request(EXTI10);	// Se habilita la petición de interrupción.
 
-  static float Opid, err, Oint, Oder, Temp_a, Opid_max, tk = 0.008;
-  static uint8_t t_triac;
-
-  Opid_max = gan_P*Tdes;
-
-  for(;;){
-    err = Tdes - temp();  // Cálculo de error
-    Oint = Oint + err*tk; // Salida de la acción integral.
-    Oder = (Temp_a - temp())/tk; // Salida de la acción derivativa.
-    Opid = gan_P*(err + (1/gan_I)*Oint - gan_D*Oder); // Salida del contro PID
-    Temp_a = temp();  // Actualización de la temp para el calculo de la acción derivativa.
-    if(0 < Opid < Opid_max )t_triac = 8*(Opid_max/Opid); // Control de la potencia a la carga.
-    if(Opid > Opid_max) t_triac = 8; // Se apaga la carga.
-    if(Opid < 0) t_triac = 0; // Se suministra 100% de energía a la carga.
-
+    for(;;){
     if(flag == 1){
-      vTaskDelay(pdMS_TO_TICKS(t_triac));
-      gpio_set(GPIOB,GPIO1);;
+      vTaskDelay(t_triac);
+      gpio_set(GPIOB,GPIO0);
+      vTaskDelay(3);
+      //__asm__("nop");
+      gpio_clear(GPIOB,GPIO0);
       flag = 0;
     }
   }
 }
+
 
 int
 main(void) {
@@ -411,11 +420,12 @@ main(void) {
 		GPIO_CNF_OUTPUT_PUSHPULL,
 		GPIO13);
 
+  rcc_periph_clock_enable(RCC_AFIO);
 	rcc_periph_clock_enable(RCC_GPIOA);	//Conf. del sel y set.
 	gpio_set_mode(GPIOA,
 		GPIO_MODE_INPUT,
 		GPIO_CNF_INPUT_FLOAT,
-		GPIO4|GPIO5);
+		GPIO4|GPIO5|GPIO10);
 
   rcc_periph_clock_enable(RCC_GPIOB); //Conf. de la salida a la lámpara.
   gpio_set_mode(GPIOB,
@@ -423,7 +433,10 @@ main(void) {
     GPIO_CNF_OUTPUT_PUSHPULL,
     GPIO0);
 
-  gpio_set(GPIOB,GPIO0);
+
+
+
+  gpio_clear(GPIOB,GPIO0);
 
 	spi_oled_init();	//Conf. e inicialización de la OLED.
 	adc_init();	//Init. del periférico ADC.
@@ -439,7 +452,7 @@ main(void) {
   //--> Se encarga de ejecutar el modo de control ON-ON_OFF
   xTaskCreate(tarea3,"M_C_OnOff",100,NULL,configMAX_PRIORITIES-3,&xTarea3);
   //--> Se encarga de ejecutar el modo de contro PID.
-  xTaskCreate(tarea4,"PID",100,NULL,configMAX_PRIORITIES-4,&xTarea4);
+  xTaskCreate(tarea4,"PID",200,NULL,configMAX_PRIORITIES-1,&xTarea4);
 
 	vTaskStartScheduler();
 	for (;;)
