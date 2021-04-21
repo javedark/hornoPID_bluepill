@@ -52,8 +52,8 @@ static volatile bool flag = 0; // Bandera de interrupción.
 
 //--> Variables para le modo PID
 
-static float Opid = 0, err = 0, Oint = 0, Oder = 0, Temp_a= 0, Opid_max = 0, tk = 0.008;
-static int t_triac = 1;
+static float Opid = 0, err = 0, Oint = 0, Oder = 0, Temp_a= 0, Opid_max = 0, tk = 0.5;
+static int t_triac = 0;
 static bool modoPID = 0;
 
 // --> ISR
@@ -61,9 +61,10 @@ static bool modoPID = 0;
 void
 	exti15_10_isr(){
     gpio_clear(GPIOB,GPIO0);
+    //flag = 1;
+		//exti_reset_request(EXTI10);
+  	exti_reset_request(EXTI10);
     flag = 1;
-		exti_reset_request(EXTI10);
-		exti_reset_request(EXTI10);
 	}
 
 //--> Mutex lock y mutex unlock.
@@ -295,17 +296,16 @@ tarea1(void *args) {
   xTaskNotifyGive(xTarea2);
   for(;;){
 	   imp_temp();
-	    vTaskDelay(pdMS_TO_TICKS(500));
+	   vTaskDelay(pdMS_TO_TICKS(500));
       if(modoPID == 1){
-        Opid_max = gan_P*Tdes;
         err = Tdes - temp();  // Cálculo de error
         Oint = Oint + err*tk; // Salida de la acción integral.
-        Oder = (Temp_a - temp())/tk; // Salida de la acción derivativa.
+        Oder = (temp() - Temp_a)/tk; // Salida de la acción derivativa.
         Opid = gan_P*(err + (1/gan_I)*Oint - (gan_D/1000)*Oder); // Salida del contro PID
         Temp_a = temp();  // Actualización de la temp para el calculo de la acción derivativa.
-        if(0 < Opid && Opid < Opid_max )t_triac = 8*(Opid_max/Opid); // Control de la potencia a la carga.
-        if(Opid > Opid_max) t_triac = 8; // Se apaga la carga.
-        if(Opid < 0) t_triac = 0; // Se suministra 100% de energía a la carga.
+        if(Opid > 0 && Opid < Opid_max )t_triac = 8*(Opid/Opid_max); // Control de la potencia a la carga.
+        if(Opid > Opid_max) t_triac = 0; // Se apaga la carga.
+        if(Opid < 0) t_triac = 8; // Se suministra 100% de energía a la carga.
       }
     }
 }
@@ -346,16 +346,17 @@ tarea1(void *args) {
      switch (ejec_opc) {
        case 1:
        param_control_onoff();
-       xTaskNotifyGive(xTarea3);
        gpio_clear(LED);
+       xTaskNotifyGive(xTarea3);
 //       while(1);
        break;
 
        case 2:
        param_control_pid();
-       xTaskNotifyGive(xTarea4);
+       Opid_max = gan_P*Tdes;
        modoPID = 1;
        gpio_clear(LED);
+       xTaskNotifyGive(xTarea4);
 //       while(1);
        break;
      }   vTaskSuspend(xTarea2);
@@ -401,9 +402,9 @@ tarea4(void *args){
     if(flag == 1){
       vTaskDelay(t_triac);
       gpio_set(GPIOB,GPIO0);
-      vTaskDelay(3);
+      //vTaskDelay(8 - 6);
       //__asm__("nop");
-      gpio_clear(GPIOB,GPIO0);
+      //gpio_clear(GPIOB,GPIO0);
       flag = 0;
     }
   }
