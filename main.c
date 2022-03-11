@@ -434,16 +434,10 @@ main(void) {
     GPIO_CNF_OUTPUT_PUSHPULL,
     GPIO0);
 
-
-
-
   gpio_clear(GPIOB,GPIO0);
 
 	spi_oled_init();	//Conf. e inicialización de la OLED.
 	adc_init();	//Init. del periférico ADC.
-
-
-
 
   h_mutex = xSemaphoreCreateMutex();
 	//--> Se encarda solo de mostrar la temperatura en oled cada 0.5s.
